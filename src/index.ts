@@ -37,8 +37,8 @@ app.get("/", (req, res) => {
   const statusColor = isMongoConnected ? "rgba(34, 197, 94, 0.12)" : "rgba(245, 158, 11, 0.12)";
   const statusTextColor = isMongoConnected ? "#a7f3d0" : "#fbbf24";
   const connectionMessage = isMongoConnected
-    ? "This service is running and connected to MongoDB. Use this endpoint in your frontend app as the API base URL."
-    : "The server is running, but MongoDB is not connected. Some API routes may fail until the database connection is restored.";
+    ? "This service is running and connected to MongoDB."
+    : "The server is running, but MongoDB is not connected.";
 
   res.send(`
     <!DOCTYPE html>
