@@ -185,7 +185,9 @@ export const signInWithGoogle = async (req: Request, res: Response) => {
 
     user.authProvider = "google";
     user.lastSeen = new Date();
-    user.username = user.username || `${usernameBase}_${Math.random().toString(36).slice(2, 6)}`;
+    if (!user.username) {
+      user.username = await generateUniqueUsername(fullName, user._id.toString());
+    }
     await user.save();
 
     const token = jwt.sign(
