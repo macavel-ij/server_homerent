@@ -62,6 +62,53 @@ const verifyGoogleToken = async (idToken: string) => {
   return payload;
 };
 
+const normalizeUsernameFromFullName = (fullName: string): string => {
+  const normalized = String(fullName || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "")
+    .replace(/^[0-9]+/, "")
+    .replace(/_+/g, "")
+    .replace(/-+/g, "");
+
+  return normalized || "googleuser";
+};
+
+const buildAlphaSuffix = (index: number) => {
+  let value = index;
+  let result = "";
+
+  while (value >= 0) {
+    result = String.fromCharCode(97 + (value % 26)) + result;
+    value = Math.floor(value / 26) - 1;
+  }
+
+  return result;
+};
+
+const generateUniqueUsername = async (fullName: string, excludeUserId?: string) => {
+  const base = normalizeUsernameFromFullName(fullName);
+  let candidate = base;
+  let attempt = 0;
+
+  while (true) {
+    const existingUser = await User.findOne({
+      username: candidate,
+      ...(excludeUserId ? { _id: { $ne: excludeUserId } } : {}),
+    }).exec();
+
+    if (!existingUser) {
+      return candidate;
+    }
+
+    attempt += 1;
+    candidate = `${base}${buildAlphaSuffix(attempt - 1)}`;
+    if (attempt > 100) {
+      return `${base}x`;
+    }
+  }
+};
+
 export const signInWithGoogle = async (req: Request, res: Response) => {
   try {
     const { idToken, role } = req.body;
@@ -74,7 +121,7 @@ export const signInWithGoogle = async (req: Request, res: Response) => {
     const fullName = String(googleProfile.name || googleProfile.given_name || email.split("@")[0] || "Google User");
     const usernameBase = fullName
       .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/[^a-z0-9]+/g, "")
       .replace(/^_+|_+$/g, "") || "googleuser";
 
     if (!email) {
@@ -93,7 +140,7 @@ export const signInWithGoogle = async (req: Request, res: Response) => {
         });
       }
 
-      const username = `${usernameBase}_${Math.random().toString(36).slice(2, 6)}`;
+      const username = await generateUniqueUsername(fullName);
       const passwordHash = await createPlaceholderPasswordHash();
       user = new User({
         username,
@@ -416,9 +463,11 @@ export const updateMe = async (req: Request, res: Response) => {
 			).exec();
 			if (!updated) return res.status(404).json({ message: "Manager not found" });
 
-			// Also update email in User collection
-			if (email) {
-				await User.findByIdAndUpdate(user.id, { email }).exec();
+			const userUpdates: any = {};
+			if (email) userUpdates.email = email;
+			if (name) userUpdates.username = await generateUniqueUsername(name, user.id);
+			if (Object.keys(userUpdates).length > 0) {
+				await User.findByIdAndUpdate(user.id, userUpdates).exec();
 			}
 
 			return res.json(updated);
@@ -431,9 +480,11 @@ export const updateMe = async (req: Request, res: Response) => {
 		).exec();
 		if (!updated) return res.status(404).json({ message: "Tenant not found" });
 
-		// Also update email in User collection
-		if (email) {
-			await User.findByIdAndUpdate(user.id, { email }).exec();
+		const userUpdates: any = {};
+		if (email) userUpdates.email = email;
+		if (name) userUpdates.username = await generateUniqueUsername(name, user.id);
+		if (Object.keys(userUpdates).length > 0) {
+			await User.findByIdAndUpdate(user.id, userUpdates).exec();
 		}
 
 		return res.json(updated);
